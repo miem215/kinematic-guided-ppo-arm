@@ -2,13 +2,15 @@
 import numpy as np
 from kinematics import ArmKinematics
 
-class KinematicReacherEnv:
+class CollaborativeKinematicReacherEnv:
     def __init__(self, alpha=0.4):
         """
-        Simulation framework wrapping physical system integration and the RL reward structure.
+        Multi-Agent Simulation Framework mapping human-robot collaborative motor tasks.
         alpha: Reward weight for maximizing workspace manipulability.
+        
+        Agent 1 ('robot'): Controls the velocity of the shoulder joint (theta1_dot).
+        Agent 2 ('human'): Controls the velocity of the elbow joint (theta2_dot).
         """
-        # Instantiate our mathematical kinematics model
         self.kine = ArmKinematics(l1=1.0, l2=1.0)
         
         # State vector: [theta1, theta2, theta1_dot, theta2_dot]
@@ -19,49 +21,80 @@ class KinematicReacherEnv:
         
         self.dt = 0.05      # Simulation time step
         self.alpha = alpha  # Singularity avoidance penalty scale
+        
+        # Define explicit agent IDs
+        self.agents = ["robot", "human"]
 
-    def step(self, action):
+    def _get_obs(self, mu, ee_pos):
+        """Generates localized multi-agent observations."""
+        # Both agents see the full state, end-effector position, target position, and manipulability
+        shared_obs = np.hstack([self.state, ee_pos, self.target_pos, mu], dtype=np.float32)
+        return {
+            "robot": shared_obs,
+            "human": shared_obs
+        }
+
+    def step(self, action_dict):
         """
-        Processes the environment state change based on policy network decisions.
-        action: Continuous 2D task-space velocity vector [x_dot, y_dot] output by RL.
+        Processes collaborative multi-agent state changes.
+        action_dict: Dictionary containing continuous 1D actions for each agent:
+                     {"robot": continuous_value, "human": continuous_value}
         """
-        # 1. Unpack geometry
+        # 1. Unpack current joint geometry
         theta1, theta2 = self.state[0], self.state[1]
         
-        # 2. Bound the incoming continuous command vector to physical limitations
-        x_dot_ref = np.clip(action, -1.2, 1.2)
+        # 2. Extract and bound individual joint velocities outputted by the independent policies
+        # Clip to protect the physical limits of the actuators
+        q_dot_robot = np.clip(action_dict["robot"], -1.5, 1.5)
+        q_dot_human = np.clip(action_dict["human"], -1.5, 1.5)
         
-        # 3. Pass task commands through the Differential Inverse Kinematics engine
-        q_dot, mu = self.kine.differential_inverse_kinematics(theta1, theta2, x_dot_ref)
+        # Consolidate the independent actions into a unified joint velocity vector
+        q_dot_input = np.array([q_dot_robot, q_dot_human], dtype=np.float32)
+        
+        # 3. Compute current task space velocity and check structural limitations
+        J = self.kine.compute_jacobian(theta1, theta2)
+        mu = self.kine.compute_manipulability(J)
+        
+        # Pass through the inverse engine to ensure DLS regulates any singular commands
+        # If actions cause a lock, the kinematic engine steps in to damp velocities safely
+        x_dot_actual = np.dot(J, q_dot_input)
+        q_dot_safe, _ = self.kine.differential_inverse_kinematics(theta1, theta2, x_dot_actual)
         
         # 4. State Integration (Euler Forward Method)
-        self.state[0] += q_dot[0] * self.dt
-        self.state[1] += q_dot[1] * self.dt
-        self.state[2], self.state[3] = q_dot[0], q_dot[1] # Update internal velocity state
+        self.state[0] += q_dot_safe[0] * self.dt
+        self.state[1] += q_dot_safe[1] * self.dt
+        self.state[2], self.state[3] = q_dot_safe[0], q_dot_safe[1] # Update internal velocity state
         
         # 5. Extract new physical coordinates via Forward Kinematics
         ee_pos = self.kine.forward_kinematics(self.state[0], self.state[1])
         
-        # 6. Reward Engineering: Quadratic tracking loss + Geometry incentive
+        # 6. Collaborative Reward Engineering: Shared tracking error + team geometry incentive
         distance = np.linalg.norm(ee_pos - self.target_pos)
-        reward = -(distance ** 2) + (self.alpha * mu)
+        shared_reward = -(distance ** 2) + (self.alpha * mu)
         
-        # Done condition (Success criteria if end-effector tracks within 5cm)
-        done = bool(distance < 0.05)
+        rewards = {
+            "robot": shared_reward,
+            "human": shared_reward
+        }
         
-        # Consolidate observation space for network evaluation
-        obs = np.hstack([self.state, ee_pos, self.target_pos, mu], dtype=np.float32)
+        # Modern multi-agent termination condition
+        done_status = bool(distance < 0.05)
+        terminated = {"robot": done_status, "human": done_status}
+        truncated = {"robot": False, "human": False}
         
-        info = {
+        # Generate new decentralized observation sets
+        obs_dict = self._get_obs(mu, ee_pos)
+        
+        info_dict = {
             "ee_position": ee_pos,
             "manipulability": mu,
             "tracking_error": distance
         }
         
-        return obs, reward, done, info
+        return obs_dict, rewards, terminated, truncated, info_dict
 
     def reset(self):
-        """Resets system to a stable, non-singular configuration away from alignment limits."""
+        """Resets dyadic system to a stable configuration away from alignment limits."""
         # Intentionally initialize away from structural locking positions (0.0, 0.0)
         self.state = np.array([0.5, 0.5, 0.0, 0.0], dtype=np.float32)
         
@@ -69,23 +102,28 @@ class KinematicReacherEnv:
         J = self.kine.compute_jacobian(self.state[0], self.state[1])
         mu = self.kine.compute_manipulability(J)
         
-        obs = np.hstack([self.state, ee_pos, self.target_pos, mu], dtype=np.float32)
-        return obs
+        return self._get_obs(mu, ee_pos), {}
 
-# --- Mock Validation Pipeline ---
+# --- Mock Multi-Agent Validation Pipeline ---
 if __name__ == "__main__":
-    env = KinematicReacherEnv()
-    observation = env.reset()
+    env = CollaborativeKinematicReacherEnv()
+    obs_dict, info = env.reset()
     
-    print("=================== PIPELINE VERIFICATION ===================")
-    print(f"Initial State Observation Map:\n{observation}\n")
+    print("=================== MARL PIPELINE VERIFICATION ===================")
+    print(f"Initial Robot View:\n{obs_dict['robot']}\n")
+    print(f"Initial Human View:\n{obs_dict['human']}\n")
     
-    # Simulating a dynamic diagonal step command from an un-trained Actor Policy
-    mock_policy_action = np.array([0.8, -0.4], dtype=np.float32)
-    next_obs, step_reward, done_status, step_info = env.step(mock_policy_action)
+    # Simulating cooperative simultaneous joint control inputs from two un-trained network policies
+    mock_marl_actions = {
+        "robot": np.array(0.5, dtype=np.float32),  # Commanding shoulder velocity
+        "human": np.array(-0.3, dtype=np.float32)  # Commanding elbow velocity
+    }
     
-    print(f"RL Command Received:        {mock_policy_action}")
+    next_obs, rewards, terminated, truncated, step_info = env.step(mock_marl_actions)
+    
+    print(f"MARL Input Logged:          {mock_marl_actions}")
     print(f"Calculated End-Effector:    {np.round(step_info['ee_position'], 4)}")
     print(f"Manipulability Score (μ):  {np.round(step_info['manipulability'], 4)}")
-    print(f"Computed Step Reward:       {np.round(step_reward, 4)}")
-    print("=============================================================")
+    print(f"Team Rewards Returned:      {rewards}")
+    print(f"Termination Status:         {terminated}")
+    print("==================================================================")

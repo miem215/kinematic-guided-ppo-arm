@@ -4,9 +4,10 @@ import numpy as np
 class ArmKinematics:
     def __init__(self, l1=1.0, l2=1.0):
         """
-        Handles the geometric and differential mapping of a 2-DoF planar manipulator.
-        l1: Length of the proximal link (shoulder to elbow)
-        l2: Length of the distal link (elbow to end-effector)
+        Handles the geometric and differential mapping of a 2-DoF planar manipulator
+        co-managed by two independent agents.
+        l1: Length of the proximal link (Shoulder - controlled by Robot Agent)
+        l2: Length of the distal link (Elbow - controlled by Human Agent)
         """
         self.l1 = l1
         self.l2 = l2
@@ -32,9 +33,9 @@ class ArmKinematics:
         """
         Computes the Yoshikawa Manipulability Index.
         Measures structural distance from kinematic singularities.
+        For a square 2x2 Jacobian, this simplifies directly to |det(J)|.
         """
-        # For a square Jacobian, this simplifies to |det(J)|
-        return np.sqrt(np.maximum(0.0, np.linalg.det(np.dot(J, J.T))))
+        return float(np.abs(np.linalg.det(J)))
 
     def differential_inverse_kinematics(self, theta1, theta2, x_dot_ref):
         """
@@ -44,14 +45,13 @@ class ArmKinematics:
         J = self.compute_jacobian(theta1, theta2)
         mu = self.compute_manipulability(J)
         
-        # Singularity avoidance threshold
-        if mu > 1e-3:
+        mu_threshold = 1e-3
+        if mu > mu_threshold:
             # Deterministic, clean matrix inversion away from limits
             q_dot = np.dot(np.linalg.inv(J), x_dot_ref)
         else:
-            # Damped Least Squares fallback to bound joint velocities near singularity boundaries
-            # q_dot = J^T * (J * J^T + lambda^2 * I)^-1
-            damping = 0.02
+            # Adaptive Damped Least Squares fallback to bound joint velocities smoothly
+            damping = 0.02 * (1.0 - (mu / mu_threshold))
             J_jt = np.dot(J, J.T) + (damping ** 2) * np.eye(2)
             q_dot = np.dot(J.T, np.dot(np.linalg.inv(J_jt), x_dot_ref))
             
