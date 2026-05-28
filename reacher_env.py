@@ -88,7 +88,7 @@ class CollaborativeKinematicReacherEnv:
         return obs_dict, rewards, terminated, truncated, info_dict
 
     def reset(self):
-        """Resets dyadic system to a stable configuration away from alignment limits."""
+        """Resets the arm to a stable configuration away from alignment limits."""
         # Intentionally initialize away from structural locking positions (0.0, 0.0)
         self.state = np.array([0.5, 0.5, 0.0, 0.0], dtype=np.float32)
         
