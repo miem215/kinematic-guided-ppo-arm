@@ -25,6 +25,10 @@ A multi-agent environment built to support shower and elbow joints coordination:
 * **Collaborative Reward:** The team shares a dense reward structured to minimize tracking error while maximizing structural manipulability to actively avoid locking:
   $$\text{Reward} = -(\text{distance}^2) + (\alpha \cdot \mu)$$
 
+
+### 3. Neural Networks & Training Pipeline (`models.py`, `train.py`)
+* **Actor-Critic Models:** Using PyTorch. The Actor models joint velocity distributions as a continuous Gaussian policy, while the Critic estimates the state-value function to keep training stable.
+* **Independent PPO (IPPO):** Both agents maintain entirely separate networks with no direct communication. They learn to coordinate purely by adapting to the changing physical environment and optimizing their shared team reward.
 ---
 
 ## Mathematics Behind the Guidance
