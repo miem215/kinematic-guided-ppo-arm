@@ -42,4 +42,12 @@ When the manipulability drops below the threshold, clean matrix inversion breaks
 $$J^* = J^T (JJ^T + \lambda^2 I)^{-1}$$
 where the damping factor $\lambda$ scales adaptively based on proximity to the singular boundary.
 
+## Training Metrics Summary
+
+| Metric | Initial Phase (Un-trained) | Convergence (Ep 4000+) |
+| :--- | :--- | :--- |
+| **Tracking Error (Distance)** | ~1.50 m to 2.90 m | **< 0.05 m (Consistently Met)** |
+| **Manipulability Index ($\mu$)**| High Oscillations (Singularities hit) | **0.80 to 0.99 (Optimal Flexibility)** |
+| **Total Team Reward** | Below -500.00 | **-7.50 to -10.00 (Stabilized)** |
+
 ---
