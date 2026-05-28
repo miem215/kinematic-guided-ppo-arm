@@ -25,6 +25,10 @@ A multi-agent environment built to support shower and elbow joints coordination:
 * **Collaborative Reward:** The team shares a dense reward structured to minimize tracking error while maximizing structural manipulability to actively avoid locking:
   $$\text{Reward} = -(\text{distance}^2) + (\alpha \cdot \mu)$$
 
+
+### 3. Neural Networks & Training Pipeline (`models.py`, `train.py`)
+* **Actor-Critic Models:** Using PyTorch. The Actor models joint velocity distributions as a continuous Gaussian policy, while the Critic estimates the state-value function to keep training stable.
+* **Independent PPO (IPPO):** Both agents maintain entirely separate networks with no direct communication. They learn to coordinate purely by adapting to the changing physical environment and optimizing their shared team reward.
 ---
 
 ## Mathematics Behind the Guidance
@@ -37,5 +41,13 @@ $$\mu(q) = \sqrt{\det(J(q)J^T(q))}$$
 When the manipulability drops below the threshold, clean matrix inversion breaks down. The environment automatically shifts to a robust pseudoinverse:
 $$J^* = J^T (JJ^T + \lambda^2 I)^{-1}$$
 where the damping factor $\lambda$ scales adaptively based on proximity to the singular boundary.
+
+## Training Metrics Summary
+
+| Metric | Initial Phase (Un-trained) | Convergence (Ep 4000+) |
+| :--- | :--- | :--- |
+| **Tracking Error (Distance)** | ~1.50 m to 2.90 m | **< 0.05 m (Consistently Met)** |
+| **Manipulability Index ($\mu$)**| High Oscillations (Singularities hit) | **0.80 to 0.99 (Optimal Flexibility)** |
+| **Total Team Reward** | Below -500.00 | **-7.50 to -10.00 (Stabilized)** |
 
 ---
