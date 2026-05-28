@@ -10,7 +10,7 @@ This project simulates a **2-Degree-of-Freedom (2-DoF) Planar Arm** co-managed b
 
 ## Key Components & Architecture
 
-### 1. Kinematics Engine (`kinematics.py`)
+### 1. Kinematics solver (`kinematics.py`)
 Handles the mathematical mapping between the joint space and Cartesian task space:
 * **Forward Kinematics:** Maps joint angles $(\theta_1, \theta_2)$ to Cartesian end-effector coordinates $(x, y)$.
 * **Analytical Jacobian:** Computes the $2\times2$ Jacobian Matrix $J(q)$ mapping joint velocities to end-effector velocities.
