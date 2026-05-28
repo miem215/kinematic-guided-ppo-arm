@@ -1,4 +1,3 @@
-# src/kinematics.py
 import numpy as np
 
 class ArmKinematics:
