@@ -6,6 +6,8 @@ A multi-agent reinforcement learning (MARL) simulation framework that maps human
 
 ## Key Components & Architecture
 
+Used python packages: numpy, PyTorch.
+
 ### 1. Kinematics solver (`kinematics.py`)
 Handles the mathematical mapping between the joint space and Cartesian task space:
 * **Forward Kinematics:** Maps joint angles $(\theta_1, \theta_2)$ to Cartesian end-effector coordinates $(x, y)$.
